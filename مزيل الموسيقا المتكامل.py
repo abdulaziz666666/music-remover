@@ -16,7 +16,9 @@ import torchaudio
 WINDOW_BG = '#222222'
 BTN_BG = '#0E6CB4'
 FG = 'white'
+BTN_PACKING = {'ipadx': 20, 'ipady': 5}
 SUPPORTED_VIDEO_FORMATS = '*.MP4 *.MKV *.MOV *.WEBM *.AVI *.FLV'
+
 rename_cases = {'music removed': '', 'underscored': '', 'original': ''}
 label_packing = {'fill': 'x', 'pady': (50, 50)}
 
@@ -58,9 +60,9 @@ def extract_audio(video_name: str):
 
     label_packing['pady'] = (10, 0)
     select_btn.forget()
-    update_guiding_label('استخراج الصوت..')
+    update_guiding_label('..استخراج الصوت')
 
-    name_without_format, video_format = video_name[:video_name.find('.')], video_name[video_name.find('.'):]
+    name_without_format, video_format = video_name[:video_name.find('.')], video_name[video_name.rfind('.'):]
     audio_name = name_without_format + '.wav'
     (
         ffmpeg.input(video_name)
@@ -72,7 +74,7 @@ def extract_audio(video_name: str):
 def separate_music(audio_name):
     loading_bar.pack(ipadx=40, padx=20, pady=(100, 0))
     
-    update_guiding_label('فصل الموسيقا..')
+    update_guiding_label('..فصل الموسيقا')
     
     model = get_model('htdemucs')
     model.eval()
@@ -98,7 +100,7 @@ def separate_music(audio_name):
 def merge_media():
     global name_without_format, video_format, label_packing
 
-    update_guiding_label('دمج الصوت مع المقطع..')
+    update_guiding_label('..دمج الصوت مع المقطع')
 
     video_input = ffmpeg.input(name_without_format + video_format)
     audio_input = ffmpeg.input(name_without_format + '.wav')
@@ -113,8 +115,20 @@ def merge_media():
     delete_temporary_files()
 
     loading_bar.forget()
-    label_packing['pady'] = (120, 0)
-    update_guiding_label('انتهت المعالجة بنجاح!')
+    label_packing['pady'] = (50, 20)
+    update_guiding_label('..انتهت المعالجة بنجاح')
+    Button(window, text='فتح المقطع', bg=BTN_BG, fg=FG, command=open_video).pack(BTN_PACKING)
+    Button(window, text='فتح موقع المقطع', bg=BTN_BG, fg=FG,
+           command=open_video_folder).pack(BTN_PACKING, pady=10)
+
+def open_video():
+    global video_name
+    os.system(video_name)
+
+def open_video_folder():
+    global video_name
+    folder = video_name[:video_name.rfind('/')]
+    os.system(f'explorer "{folder}"')
 
 def rename_video_to(case: str):
     global video_name
