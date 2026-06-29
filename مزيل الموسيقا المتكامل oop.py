@@ -4,6 +4,7 @@ from tkinter.filedialog import askopenfile
 from tkinter.messagebox import showinfo
 from contextlib import redirect_stderr
 import os
+import subprocess
 import re
 
 from demucs.pretrained import get_model
@@ -11,6 +12,8 @@ from demucs.apply import apply_model
 import ffmpeg
 import torch
 import torchaudio
+import cv2
+from threading import Thread
 
 # Constants
 WINDOW_BG = '#222222'
@@ -20,8 +23,8 @@ BTN_PACKING = {'ipadx': 20, 'ipady': 5}
 SUPPORTED_VIDEO_FORMATS = '*.MP4 *.MKV *.MOV *.WEBM *.AVI *.FLV'
 
 class ProgressRecorder():
-    def setup(self, music_remover):
-        self.music_remover = music_remover
+    def setup(self, app):
+        self.app = app
 
     def write(self, text):
         match = re.search(r'(\d+)%', text)
@@ -29,17 +32,24 @@ class ProgressRecorder():
         if match:
             percentage = int(match.group(1))
             (
-            self.music_remover.guiding_label.config(
-                text=f'{percentage}%\n{self.music_remover.last_guiding_text}'
+            self.app.guiding_label.config(
+                text=f'{percentage}%\n{self.app.last_guiding_text}'
                 )
             )
-            self.music_remover.loading_bar.config(value=percentage)
-            self.music_remover.update_idletasks()
+            self.app.loading_bar.config(value=percentage)
+            self.app.update_idletasks()
 
     def flush(self):
         pass
 
-class MusicRemover(Tk):
+class MusicRemover:
+    def __init__(self, video_name: str, is_clip: bool):
+        self.video_name = video_name
+
+
+
+
+class App(Tk):
     def __init__(self):
         super().__init__()
 
@@ -68,48 +78,94 @@ class MusicRemover(Tk):
         except AttributeError:
             showinfo('ملاحظة', 'لم يتم اختيار المقطع')
         else:
-            underscored_name = '_'.join(self.video_name.split())
-            
-            self.rename_cases['original'] = self.video_name
-            self.rename_cases['underscored'] = underscored_name
-            self.rename_cases['music removed'] = self.video_name[:self.video_name.find('.')] + '(بلا موسيقا).mp4'
+            self.select_btn.forget()
 
-            self.video_name = self.rename_video_to('underscored')
-            self.extract_audio()
+            self.update_guiding_label('المشاهدة الفورية بلا موسيقا تعرض لك المقطع\n.بصورة لقطات فور الانتهاء من تنقية كل لقطة\n\n' \
+                                      'أما حفظ المقطع بلا موسيقا فيكون بتنقيته\n.ثم حفظه في الجهاز بكل بساطة')        
+            self.show_options()
+
+            '''
+            لازم اعيد هيكلة الدوال عشان تناسب المشاهدة الفورية
+            وتناسب الحفظ الكامل
+            النتيجة مقبولة إلى حد ما.. تحتاج مسار خاص للفصل
+            وتصير الأمور تمام ان شاء الله
+            '''
+            # self.extract_audio()
 
     def show_options(self):
-        self.direct_display_btn = Button(self, text='مشاهدة فورية بلا موسيقا', bg=BTN_BG, fg=FG)
+        self.direct_display_btn = Button(self, text='مشاهدة فورية بلا موسيقا',
+                                         bg=BTN_BG, fg=FG, command=lambda: self.go_to_option('show'))
         self.direct_display_btn.pack(BTN_PACKING)
 
         self.process_video_btn = Button(self, text='حفظ المقطع بلا موسيقا',
-                                        bg=BTN_BG, fg=FG, command=self.extract_audio)
-        self.process_video_btn.pack(BTN_PACKING)
+                                        bg=BTN_BG, fg=FG, command=lambda: self.go_to_option('save'))
+        self.process_video_btn.pack(BTN_PACKING, ipadx=24, pady=10)
 
+    def go_to_option(self, option: str):
+        for btn in (self.direct_display_btn, self.process_video_btn):
+            btn.forget()
+
+        if option == 'show':
+            self.slice_video_into_clips()
+        elif option == 'save':
+            self.extract_audio()
 
     def slice_video_into_clips(self):
+        self.update_guiding_label('..تقسيم المقطع')
+
         probe = ffmpeg.probe(self.video_name)
         length = float(probe['format']['duration'])
 
-        clips = []
-        last_sec = 0
-        last_index = 0
+        self.clips = []
+        self.processed_clips = []
 
         for i, sec in enumerate(list(range(0, round(length), 10))):
-            ffmpeg.input(self.video_name, ss=sec, t=10).output(f'{i}.mp4').run()
-            last_sec = sec
-            last_index = i
-            clips.append(f'{i}.mp4') 
+            ffmpeg.input(self.video_name, ss=sec, t=10).output(f'{i}.mp4').run(overwrite_output=True)
+            self.clips.append(f'{i}.mp4') 
 
-        ffmpeg.input(self.video_name, ss=last_sec, t=length-last_sec).output(f'{last_index+1}.mp4').run()
-        clips.append(f'{last_index+1}.mp4')
-    
-    def watch_while_procces(self):
-        
+        self.threaded_watchWhileProcess()
 
-    def extract_audio(self):
+    def threaded_watchWhileProcess(self):
+        Thread(target=self.watch_while_process, daemon=True).start()
+
+    def watch_while_process(self):
+        process = None
+
+        for i, clip in enumerate(self.clips):
+            self.extract_audio(i, clip) # it continues all the process sequentially
+
+            if process:
+                Thread(target=process.wait, daemon=True).start()
+            
+            process = subprocess.Popen([
+                'ffplay',
+                '-x', '1280',
+                '-y', '720',
+                '-autoexit',
+                self.processed_clips[i]
+            ])
+
+    def extract_audio(self, i = 0, clip = None):
         self.label_packing['pady'] = (10, 0)
-        self.select_btn.forget()
-        self.update_guiding_label('..استخراج الصوت')
+
+        if not self.loading_bar.winfo_ismapped():
+            self.loading_bar.pack(ipadx=40, padx=20, pady=(100, 0))
+
+        if clip:
+            self.video_name = clip
+            self.update_progress_bar(i/len(self.clips)*100)
+            self.update_guiding_label(f'{i+1}/{len(self.clips)}')
+        else:
+            underscored_name = '_'.join(self.video_name.split())
+            self.rename_cases['original'] = self.video_name
+            self.rename_cases['underscored'] = underscored_name
+            self.rename_cases['music removed'] = self.video_name[:self.video_name.find('.')] + '(بلا موسيقا).mp4'
+            self.video_name = self.rename_video_to('underscored')
+
+            self.update_guiding_label('..استخراج الصوت')
+
+        if self.select_btn.winfo_ismapped():
+            self.select_btn.forget()
 
         self.name_without_format, self.video_format = self.video_name[:self.video_name.find('.')], self.video_name[self.video_name.rfind('.'):]
         self.audio_name = self.name_without_format + '.wav'
@@ -118,56 +174,62 @@ class MusicRemover(Tk):
             .output(self.audio_name)
             .run(overwrite_output=True)
         )
-        self.separate_music()
+        self.separate_music(clip)
     
-    def separate_music(self):
-        self.loading_bar.pack(ipadx=40, padx=20, pady=(100, 0))
-        
-        self.update_guiding_label('..فصل الموسيقا')
-        
+    def separate_music(self, clip = None):
         model = get_model('htdemucs')
         model.eval()
-
         wav, sr = torchaudio.load(self.audio_name)
-        with redirect_stderr(self.progress_recorder):
-            
+
+        if clip:
             with torch.no_grad():
-                if float(ffmpeg.probe(self.audio_name)['format']['duration'])//60 <= 1:
-                    stems = apply_model(model, wav.unsqueeze(0), split=True, progress=True)[0]
-                else:
-                    stems = apply_model(
-                        model,
-                        wav.unsqueeze(0),
-                        split=True,         # Split into chunks
-                        overlap=0.25,       # Overlap between chunks
-                        progress=True
-                    )[0]
+                stems = apply_model(model, wav.unsqueeze(0), progress=True)[0]
+        else:            
+            self.update_guiding_label('..فصل الموسيقا')
+
+            with redirect_stderr(self.progress_recorder):
+                with torch.no_grad():
+                    if float(ffmpeg.probe(self.audio_name)['format']['duration'])//60 <= 1:
+                        stems = apply_model(model, wav.unsqueeze(0), split=True, progress=True)[0]
+                    else:
+                        stems = apply_model(
+                            model,
+                            wav.unsqueeze(0),
+                            split=True,         # Split into chunks
+                            overlap=0.25,       # Overlap between chunks
+                            progress=True
+                        )[0]
         
-        torchaudio.save("vocals.wav", stems[3], sr)
-        self.merge_media()
+        torchaudio.save('vocals.wav', stems[3], sr)
+        self.merge_media(clip)
 
-    def merge_media(self):
-        self.update_guiding_label('..دمج الصوت مع المقطع')
-
+    def merge_media(self, clip = None):
         video_input = ffmpeg.input(self.name_without_format + self.video_format)
-        audio_input = ffmpeg.input(self.name_without_format + '.wav')
-        (
-            ffmpeg.concat(video_input, audio_input, v=1, a=1)
-            .output(self.rename_cases["music removed"])
-            .run(overwrite_output=True)
-        )
-        
-        self.rename_video_to('original')
+        audio_input = ffmpeg.input('vocals.wav')
 
+        if clip:
+            (
+                ffmpeg.concat(video_input, audio_input, v=1, a=1)
+                .output(self.name_without_format+'(بلا موسيقا).mp4')
+                .run(overwrite_output=True)
+            )
+            self.processed_clips.append(self.name_without_format+'(بلا موسيقا).mp4')
+        else:
+            self.update_guiding_label('..دمج الصوت مع المقطع')
+            (
+                ffmpeg.concat(video_input, audio_input, v=1, a=1)
+                .output(self.rename_cases["music removed"])
+                .run(overwrite_output=True)
+            )
+            self.loading_bar.forget()
+            self.label_packing['pady'] = (50, 50)
+            self.update_guiding_label('..انتهت المعالجة بنجاح')
+
+            Button(self, text='فتح المقطع', bg=BTN_BG, fg=FG, command=self.open_video).pack(BTN_PACKING)
+            Button(self, text='فتح موقع المقطع', bg=BTN_BG, fg=FG,
+                command=self.open_video_folder).pack(BTN_PACKING, pady=10)
+            
         self.delete_temporary_files()
-
-        self.loading_bar.forget()
-        self.label_packing['pady'] = (50, 50)
-        self.update_guiding_label('..انتهت المعالجة بنجاح')
-
-        Button(self, text='فتح المقطع', bg=BTN_BG, fg=FG, command=self.open_video).pack(BTN_PACKING)
-        Button(self, text='فتح موقع المقطع', bg=BTN_BG, fg=FG,
-            command=self.open_video_folder).pack(BTN_PACKING, pady=10)
 
     def open_video(self):
         os.startfile(self.rename_cases['music removed'])
@@ -182,9 +244,10 @@ class MusicRemover(Tk):
 
     def delete_temporary_files(self):
         os.remove('vocals.wav')
+
         
-    def update_progress_bar(self, percentage: int):
-        self.loading_bar['value'] = percentage
+    def update_progress_bar(self, percentage: float):
+        self.loading_bar.config(value=percentage)
 
     def update_guiding_label(self, text: str):
         self.guiding_label.forget()
@@ -194,13 +257,13 @@ class MusicRemover(Tk):
         self.update()
 
 def main():
-    music_remover = MusicRemover()
+    app = App()
     progress_recorder = ProgressRecorder()
     
-    music_remover.setup(progress_recorder=progress_recorder)
-    progress_recorder.setup(music_remover=music_remover)
+    app.setup(progress_recorder=progress_recorder)
+    progress_recorder.setup(app=app)
 
-    music_remover.mainloop()
+    app.mainloop()
 
 if __name__ == '__main__':
     main()
