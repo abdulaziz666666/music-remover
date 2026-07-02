@@ -6,6 +6,8 @@ from contextlib import redirect_stderr
 import os
 import subprocess
 import re
+from queue import Queue
+from time import sleep
 
 from demucs.pretrained import get_model
 from demucs.apply import apply_model
@@ -47,8 +49,6 @@ class MusicRemover:
         self.video_name = video_name
 
 
-
-
 class App(Tk):
     def __init__(self):
         super().__init__()
@@ -84,14 +84,6 @@ class App(Tk):
                                       'أما حفظ المقطع بلا موسيقا فيكون بتنقيته\n.ثم حفظه في الجهاز بكل بساطة')        
             self.show_options()
 
-            '''
-            لازم اعيد هيكلة الدوال عشان تناسب المشاهدة الفورية
-            وتناسب الحفظ الكامل
-            النتيجة مقبولة إلى حد ما.. تحتاج مسار خاص للفصل
-            وتصير الأمور تمام ان شاء الله
-            '''
-            # self.extract_audio()
-
     def show_options(self):
         self.direct_display_btn = Button(self, text='مشاهدة فورية بلا موسيقا',
                                          bg=BTN_BG, fg=FG, command=lambda: self.go_to_option('show'))
@@ -117,11 +109,11 @@ class App(Tk):
         length = float(probe['format']['duration'])
 
         self.clips = []
-        self.processed_clips = []
+        self.processed_clips = Queue(maxsize=1000)
 
         for i, sec in enumerate(list(range(0, round(length), 10))):
             ffmpeg.input(self.video_name, ss=sec, t=10).output(f'{i}.mp4').run(overwrite_output=True)
-            self.clips.append(f'{i}.mp4') 
+            self.clips.append(f'{i}.mp4')
 
         self.threaded_watchWhileProcess()
 
@@ -129,21 +121,31 @@ class App(Tk):
         Thread(target=self.watch_while_process, daemon=True).start()
 
     def watch_while_process(self):
-        process = None
+        Thread(target=self.process, daemon=True).start()
+        Thread(target=self.watch, daemon=True).start()
 
+    def process(self):
         for i, clip in enumerate(self.clips):
             self.extract_audio(i, clip) # it continues all the process sequentially
+        
+        self.processed_clips.put('finished')
 
-            if process:
-                Thread(target=process.wait, daemon=True).start()
-            
-            process = subprocess.Popen([
+    def watch(self):
+        while True:
+            sleep(0.1)
+
+            clip = self.processed_clips.get(timeout=12)
+            if clip == 'finished':
+                break
+
+            self.play_clip_process = subprocess.Popen([
                 'ffplay',
                 '-x', '1280',
                 '-y', '720',
                 '-autoexit',
-                self.processed_clips[i]
+                clip
             ])
+            self.play_clip_process.wait()
 
     def extract_audio(self, i = 0, clip = None):
         self.label_packing['pady'] = (10, 0)
@@ -153,8 +155,9 @@ class App(Tk):
 
         if clip:
             self.video_name = clip
-            self.update_progress_bar(i/len(self.clips)*100)
             self.update_guiding_label(f'{i+1}/{len(self.clips)}')
+            self.update_progress_bar(i/len(self.clips)*100)
+            self.update_idletasks()
         else:
             underscored_name = '_'.join(self.video_name.split())
             self.rename_cases['original'] = self.video_name
@@ -213,7 +216,7 @@ class App(Tk):
                 .output(self.name_without_format+'(بلا موسيقا).mp4')
                 .run(overwrite_output=True)
             )
-            self.processed_clips.append(self.name_without_format+'(بلا موسيقا).mp4')
+            self.processed_clips.put(self.name_without_format+'(بلا موسيقا).mp4')
         else:
             self.update_guiding_label('..دمج الصوت مع المقطع')
             (
