@@ -1,3 +1,7 @@
+
+# This is an old version of the program. It is procedural oriented but it doesn't have the same features the OOP version has.
+# Also, it may show some errors as it is not maintained.
+
 from tkinter import Tk, Label, Button, IntVar
 from tkinter.ttk import Progressbar
 from tkinter.filedialog import askopenfile
