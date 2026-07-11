@@ -6,7 +6,7 @@ from contextlib import redirect_stderr
 import os
 import subprocess
 import re
-from queue import Queue
+import queue
 from time import sleep
 
 from demucs.pretrained import get_model
@@ -14,7 +14,6 @@ from demucs.apply import apply_model
 import ffmpeg
 import torch
 import torchaudio
-import cv2
 from threading import Thread
 
 # Constants
@@ -33,21 +32,12 @@ class ProgressRecorder():
 
         if match:
             percentage = int(match.group(1))
-            (
-            self.app.guiding_label.config(
-                text=f'{percentage}%\n{self.app.last_guiding_text}'
-                )
-            )
-            self.app.loading_bar.config(value=percentage)
+            self.app.guiding_label.config(text=f'{percentage}%\n{self.app.last_guiding_text}')
+            self.app.progress_bar.config(value=percentage)
             self.app.update_idletasks()
 
     def flush(self):
         pass
-
-class MusicRemover:
-    def __init__(self, video_name: str, is_clip: bool):
-        self.video_name = video_name
-
 
 class App(Tk):
     def __init__(self):
@@ -66,7 +56,7 @@ class App(Tk):
         self.select_btn = Button(self, text='اختر المقطع', bg=BTN_BG, fg=FG, command=self.select_video)
         self.select_btn.pack(ipadx=20, ipady=5)
 
-        self.loading_bar = Progressbar(self, length=100, orient='horizontal')
+        self.progress_bar = Progressbar(self, length=200, orient='horizontal')
 
     
     def setup(self, progress_recorder):
@@ -78,8 +68,14 @@ class App(Tk):
         except AttributeError:
             showinfo('ملاحظة', 'لم يتم اختيار المقطع')
         else:
-            self.select_btn.forget()
+            self.underscored_name = self.video_name[:self.video_name.rfind('/')] + '_'.join(self.video_name[self.video_name.rfind('/'):].split())
+            self.rename_cases['original'] = self.video_name
+            self.rename_cases['underscored'] = self.underscored_name
+            self.rename_cases['music removed'] = self.video_name[:self.video_name.find('.')] + '(بلا موسيقا).mp4'
 
+            self.video_name = self.rename_video_to('underscored')
+
+            self.select_btn.forget()
             self.update_guiding_label('المشاهدة الفورية بلا موسيقا تعرض لك المقطع\n.بصورة لقطات فور الانتهاء من تنقية كل لقطة\n\n' \
                                       'أما حفظ المقطع بلا موسيقا فيكون بتنقيته\n.ثم حفظه في الجهاز بكل بساطة')        
             self.show_options()
@@ -103,17 +99,23 @@ class App(Tk):
             self.extract_audio()
 
     def slice_video_into_clips(self):
-        self.update_guiding_label('..تقسيم المقطع')
-
         probe = ffmpeg.probe(self.video_name)
         length = float(probe['format']['duration'])
 
+        if length >= 60:
+            self.start_from_second = True
+
+        self.update_guiding_label(f'..تقسيم المقطع')
+
         self.clips = []
-        self.processed_clips = Queue(maxsize=1000)
+        self.processed_clips = queue.Queue(maxsize=1000)
+        self.listed_processed_clips = []
 
         for i, sec in enumerate(list(range(0, round(length), 10))):
             ffmpeg.input(self.video_name, ss=sec, t=10).output(f'{i}.mp4').run(overwrite_output=True)
             self.clips.append(f'{i}.mp4')
+
+        self.rename_video_to('original')
 
         self.threaded_watchWhileProcess()
 
@@ -129,15 +131,25 @@ class App(Tk):
             self.extract_audio(i, clip) # it continues all the process sequentially
         
         self.processed_clips.put('finished')
-
+        
     def watch(self):
         while True:
             sleep(0.1)
 
-            clip = self.processed_clips.get(timeout=12)
-            if clip == 'finished':
-                break
+            # try: 
+            #     self.processed_clips.queue[-1]
+            # except IndexError:
+            #     continue
+            # else:
+            #     if not '1' in self.processed_clips.queue[-1]:
+            #         continue
 
+            clip = self.processed_clips.get()
+
+            if clip == 'finished':
+                self.save_whole_video()
+                break
+            
             self.play_clip_process = subprocess.Popen([
                 'ffplay',
                 '-x', '1280',
@@ -147,28 +159,23 @@ class App(Tk):
             ])
             self.play_clip_process.wait()
 
+        print('finished')
+
     def extract_audio(self, i = 0, clip = None):
         self.label_packing['pady'] = (10, 0)
 
-        if not self.loading_bar.winfo_ismapped():
-            self.loading_bar.pack(ipadx=40, padx=20, pady=(100, 0))
+        if self.select_btn.winfo_ismapped():
+            self.select_btn.forget()
+        if not self.progress_bar.winfo_ismapped():
+            self.progress_bar.pack(padx=20, pady=(100, 0))
 
         if clip:
             self.video_name = clip
+            self.update_progress_bar((i+1)/len(self.clips)*100)
             self.update_guiding_label(f'{i+1}/{len(self.clips)}')
-            self.update_progress_bar(i/len(self.clips)*100)
-            self.update_idletasks()
         else:
-            underscored_name = '_'.join(self.video_name.split())
-            self.rename_cases['original'] = self.video_name
-            self.rename_cases['underscored'] = underscored_name
-            self.rename_cases['music removed'] = self.video_name[:self.video_name.find('.')] + '(بلا موسيقا).mp4'
-            self.video_name = self.rename_video_to('underscored')
-
             self.update_guiding_label('..استخراج الصوت')
 
-        if self.select_btn.winfo_ismapped():
-            self.select_btn.forget()
 
         self.name_without_format, self.video_format = self.video_name[:self.video_name.find('.')], self.video_name[self.video_name.rfind('.'):]
         self.audio_name = self.name_without_format + '.wav'
@@ -213,10 +220,11 @@ class App(Tk):
         if clip:
             (
                 ffmpeg.concat(video_input, audio_input, v=1, a=1)
-                .output(self.name_without_format+'(بلا موسيقا).mp4')
+                .output(self.name_without_format+'(clean).mp4')
                 .run(overwrite_output=True)
             )
-            self.processed_clips.put(self.name_without_format+'(بلا موسيقا).mp4')
+            self.processed_clips.put(self.name_without_format+'(clean).mp4')
+            self.listed_processed_clips.append(self.name_without_format+'(clean).mp4')
         else:
             self.update_guiding_label('..دمج الصوت مع المقطع')
             (
@@ -224,7 +232,7 @@ class App(Tk):
                 .output(self.rename_cases["music removed"])
                 .run(overwrite_output=True)
             )
-            self.loading_bar.forget()
+            self.progress_bar.forget()
             self.label_packing['pady'] = (50, 50)
             self.update_guiding_label('..انتهت المعالجة بنجاح')
 
@@ -232,8 +240,18 @@ class App(Tk):
             Button(self, text='فتح موقع المقطع', bg=BTN_BG, fg=FG,
                 command=self.open_video_folder).pack(BTN_PACKING, pady=10)
             
-        self.delete_temporary_files()
-
+            self.rename_video_to('original')
+            self.delete_temporary_files()
+        
+    def save_whole_video(self):
+        open('processed clips.txt', 'w').writelines([f'file {clip}\n' for clip in self.listed_processed_clips])
+        (
+            ffmpeg.input('processed clips.txt', format='concat', safe=0)
+            .output(self.rename_cases['music removed'], c='copy')
+            .run(overwrite_output=True)
+        )
+        print('video saved successfully')
+    
     def open_video(self):
         os.startfile(self.rename_cases['music removed'])
 
@@ -242,15 +260,17 @@ class App(Tk):
         os.startfile(folder)
 
     def rename_video_to(self, case: str):
+        '''
+        In all 2 cases, this method will be used to rename video file to/from 'underscored' and 'original'
+        '''
         os.rename(self.video_name, self.rename_cases[case])
         return self.rename_cases[case]
 
     def delete_temporary_files(self):
         os.remove('vocals.wav')
-
         
     def update_progress_bar(self, percentage: float):
-        self.loading_bar.config(value=percentage)
+        self.progress_bar.config(value=percentage)
 
     def update_guiding_label(self, text: str):
         self.guiding_label.forget()
@@ -258,7 +278,7 @@ class App(Tk):
         self.guiding_label.pack(self.label_packing)
         self.last_guiding_text = text
         self.update()
-
+    
 def main():
     app = App()
     progress_recorder = ProgressRecorder()
