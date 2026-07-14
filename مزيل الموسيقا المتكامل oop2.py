@@ -303,10 +303,12 @@ class App(Tk):
         os.system('cls')
         os.remove('vocals.wav')
         os.remove(self.audio_name)
+
         if os.path.exists('separated'):
-            os.remove('separated')
+            os.rmdir('separated')
 
         if there_is_clips:
+            os.remove('processed clips.txt')
             for clip, p_clip in zip(self.clips, self.listed_processed_clips):
                 temp_files = [clip, p_clip, clip.replace('.mp4', '.wav')]
 
