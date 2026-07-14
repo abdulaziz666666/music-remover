@@ -7,8 +7,7 @@ import os
 import subprocess
 import re
 import queue
-from time import sleep
-from math import ceil
+from time import sleep 
 
 from demucs.pretrained import get_model
 from demucs.apply import apply_model
@@ -72,7 +71,7 @@ class App(Tk):
             self.underscored_name = self.video_name[:self.video_name.rfind('/')] + '_'.join(self.video_name[self.video_name.rfind('/'):].split())
             self.rename_cases['original'] = self.video_name
             self.rename_cases['underscored'] = self.underscored_name
-            self.rename_cases['music removed'] = self.video_name[:self.video_name.find('.')] + '(بلا_موسيقا).mp4'
+            self.rename_cases['music removed'] = self.video_name[:self.video_name.find('.')] + ' (بلا موسيقا).mp4'
 
             self.video_name = self.rename_video_to('underscored')
 
@@ -103,13 +102,11 @@ class App(Tk):
         probe = ffmpeg.probe(self.video_name)
         length = float(probe['format']['duration'])
 
-
         self.clips = []
         self.processed_clips = queue.Queue(maxsize=1000)
         self.listed_processed_clips = []
 
         clips_range = list(range(0, round(length), 10))
-        
         for i in range(len(clips_range)):
             self.clips.append(f'{i}.mp4')
 
@@ -123,10 +120,13 @@ class App(Tk):
             '-reset_timestamps', '1',
             '%d.mp4',
             '-y'
-        ])
+        ])  
         process.wait()
 
-        self.rename_video_to('original')
+
+        if not os.path.exists(self.clips[-1]):
+            self.clips.pop()
+
         self.threaded_watch_while_process()
 
     def threaded_watch_while_process(self):
@@ -189,12 +189,13 @@ class App(Tk):
         self.name_without_format = self.video_name[:self.video_name.find('.')]
         self.audio_name = self.name_without_format + '.wav'
         
-        subprocess.Popen([
+        process = subprocess.Popen([
             'ffmpeg',
             '-i', self.video_name,
-            self.name_without_format + '.wav',
+            self.audio_name,
             '-y'
         ])
+        process.wait()
         self.separate_music(clip)
     
     def separate_music(self, clip = None):
@@ -230,7 +231,10 @@ class App(Tk):
                 'ffmpeg',
                 '-i', self.video_name,
                 '-i', 'vocals.wav',
-                '-c', 'copy',
+                '-map', '0:v:0',
+                '-map', '1:a:0',
+                '-c:v', 'copy',
+                '-c:a', 'aac',
                 self.name_without_format + '(clean).mp4',
                 '-y'
             ])
@@ -244,8 +248,11 @@ class App(Tk):
                 'ffmpeg',
                 '-i', self.video_name,
                 '-i', 'vocals.wav',
-                '-c', 'copy',
-                self.name_without_format + '(بلا_موسيقا).mp4',
+                '-map', '0:v:0',
+                '-map', '1:a:0',
+                '-c:v', 'copy',
+                '-c:a', 'aac',
+                self.rename_cases['music removed'],
                 '-y'
             ])
             process.wait()
@@ -277,7 +284,8 @@ class App(Tk):
         os.startfile(self.rename_cases['music removed'])
 
     def open_video_folder(self):
-        folder = self.video_name[:self.video_name.rfind('/')]
+        filename = self.rename_cases['original']
+        folder = filename[:filename.rfind('/')]
         os.startfile(folder)
 
     def rename_video_to(self, case: str):
@@ -294,22 +302,21 @@ class App(Tk):
     def delete_temporary_files(self, there_is_clips=False):
         os.system('cls')
         os.remove('vocals.wav')
-        os.remove(self.video_name[:self.video_name.rfind('.')] + '.wav')
+        os.remove(self.audio_name)
+        if os.path.exists('separated'):
+            os.remove('separated')
 
         if there_is_clips:
             for clip, p_clip in zip(self.clips, self.listed_processed_clips):
-                try:
-                    os.remove(clip)
-                    os.remove(clip.replace('.mp4', '.wav'))
-                    os.remove(p_clip)
-                except FileNotFoundError as e:
-                    print(f"\nEither:\n\t{clip}", p_clip, clip.replace('.mp4', '.wav'), sep='\nor\n\t')
-                    print("doesn't exist.")
-                    print(e)
-                else:
-                    file_number = clip.split('/')[-1][:clip.rfind('.')]
-                    file_number = int(file_number) + 1
-                    print(f'\r{file_number}/{len(self.clips)} deleted successfully', '\t')
+                temp_files = [clip, p_clip, clip.replace('.mp4', '.wav')]
+
+                for f in temp_files:
+                    if os.path.exists(f):
+                        os.remove(f)
+                    
+                file_number = clip.split('/')[-1][:clip.rfind('.')]
+                file_number = int(file_number) + 1
+                print(f'{file_number}/{len(self.clips)} deleted successfully')
 
         
     def update_progress_bar(self, percentage: float):
