@@ -1,7 +1,7 @@
-from tkinter import Tk, Label, Button
-from tkinter.ttk import Progressbar
+from tkinter import Tk, Label, Button, StringVar
+from tkinter.ttk import Progressbar, Combobox
 from tkinter.filedialog import askopenfile
-from tkinter.messagebox import showinfo
+from tkinter.messagebox import showinfo, showerror
 from contextlib import redirect_stderr
 import os
 import subprocess
@@ -44,9 +44,13 @@ class ClipsMusicRemover:
         self.app = app
         self.progress_recorder = progress_recorder
     
-    def start_processing(self, video_name, name_cases):
+    def start_processing(self, video_name, name_cases, dimensions, duration):
         self.video_name = video_name
         self.name_cases = name_cases
+        self.clip_dimensions = dimensions 
+        self.clip_duration = duration # it comes as string
+        self.clip_duration = int(self.clip_duration.removesuffix('s'))
+
         self.name_without_format = self.video_name[:self.video_name.find('.')]
         self.audio_name = self.name_without_format + '.wav'
 
@@ -66,7 +70,7 @@ class ClipsMusicRemover:
         self.processed_clips = queue.Queue(maxsize=1000)
         self.listed_processed_clips = []
 
-        clips_range = list(range(0, round(length), 10))
+        clips_range = list(range(0, round(length), self.clip_duration))
         for i in range(len(clips_range)):
             self.clips.append(f'{i}.mp4')
 
@@ -75,7 +79,7 @@ class ClipsMusicRemover:
             '-i', self.video_name,
             '-c', 'copy',
             '-f', 'segment',
-            '-segment_time', '10',
+            '-segment_time', str(self.clip_duration),
             '-reset_timestamps', '1',
             '%d.mp4',
             '-y'
@@ -100,6 +104,15 @@ class ClipsMusicRemover:
         self.processed_clips.put('finished')
         
     def watch(self):
+        dimesion_args = []
+        if self.clip_dimensions == 'وضع الشاشة الكاملة':
+            dimesion_args = ['-fs']
+        else:
+            dimesion_args = [
+                '-x', self.clip_dimensions.split('x')[1],
+                '-y', self.clip_dimensions.split('x')[0],
+            ]
+
         while True:
             sleep(0.1)
 
@@ -109,10 +122,9 @@ class ClipsMusicRemover:
             
             self.play_clip_process = subprocess.Popen([
                 'ffplay',
-                '-x', '1280',
-                '-y', '720',
-                '-autoexit',
-                clip
+                clip,
+                *dimesion_args,
+                '-autoexit'
             ])
             self.play_clip_process.wait()
         
@@ -260,14 +272,17 @@ class App(Tk):
             self.name_cases['underscored'] = self.underscored_name
             self.name_cases['music removed'] = self.video_name[:self.video_name.find('.')] + ' (بلا موسيقا).mp4'
 
-            self.video_name = self.rename_video_to('underscored')
+            try:
+                self.video_name = self.rename_video_to('underscored')
+            except FileExistsError:
+                print('\n\n\nIt seems the filename is already underscored\n\n\n')
 
             self.select_btn.forget()
             self.update_guiding_label('المشاهدة الفورية بلا موسيقا تعرض لك المقطع\n.بصورة لقطات فور الانتهاء من تنقية كل لقطة\n\n' \
                                       'أما حفظ المقطع بلا موسيقا فيكون بتنقيته\n.ثم حفظه في الجهاز بكل بساطة')        
-            self.show_options()
+            self.show_processing_options()
 
-    def show_options(self):
+    def show_processing_options(self):
         self.direct_display_btn = Button(
             self,
             text='مشاهدة فورية بلا موسيقا',
@@ -291,34 +306,111 @@ class App(Tk):
             btn.forget()
 
         if option == 'show':
-            self.processing_thread = Thread(target=lambda: self.cmr.start_processing(self.video_name, self.name_cases), daemon=True)
+            # self.clip_options_thread = Thread(target=self.show_watching_options, daemon=True)
+            # self.clip_options_thread.start()
+            self.show_watching_options()
+
         elif option == 'save':
             self.processing_thread = Thread(target=lambda: self.vmr.start_processing(self.video_name, self.name_cases), daemon=True)
-        
-        self.processing_thread.start()
-        '''
-        اتوقع ان البرنامج مكتمل الآن.. وصلته إلى ما كان عليه قبل التقسيم
+            self.processing_thread.start()
+            Thread(target=self.show_finishing_options, daemon=True).start()
 
-        الآن لابد أن اضع فكرة الإعدادات وخيار حفظ المقطع
-        والله المستعان
-        '''
-        Thread(target=self.show_finishing_options, daemon=True).start()
+    def show_watching_options(self):
+        self.label_packing['pady'] = (50, 30)
+        self.update_guiding_label('حدد إعدادات المشاهدة')
+        
+        self.clip_dimensions = StringVar()
+        self.dimensions_combobox = Combobox(
+            self,
+            textvariable=self.clip_dimensions,
+            state='readonly',
+            justify='center'
+        )
+        self.dimensions_combobox.config(
+            values=(
+                'اختر أبعاد اللقطات',
+                '720x1280',
+                '1080x1920',
+                'وضع الشاشة الكاملة'
+            )
+        )
+        self.dimensions_combobox.current(0)
+        self.dimensions_combobox.pack()
+
+        self.clip_duration = StringVar()
+        self.duration_combobox = Combobox(
+            self,
+            textvariable=self.clip_duration,
+            state='readonly',
+            justify='center'
+        )
+        self.duration_combobox.config(
+            values=(
+                'اختر مدة اللقطات',
+                '10s',
+                '60s',
+            )
+        )
+        self.duration_combobox.current(0)
+        self.duration_combobox.pack(pady=20)
+
+        self.save_options_btn = Button(self, text='بدء المشاهدة', bg=BTN_BG, fg=FG, command=self.check_selection)
+        self.save_options_btn.pack(ipadx=30, ipady=3)
+    
+    def check_selection(self):
+        dimensions = self.clip_dimensions.get()
+        duration = self.clip_duration.get()
+
+        if dimensions != 'اختر أبعاد اللقطات' and duration != 'اختر مدة اللقطات':
+            self.gui_preparation('select clip options')
+            self.processing_thread = Thread(
+                target=lambda: self.cmr.start_processing(self.video_name, self.name_cases, dimensions, duration),
+                daemon=True
+            )
+            self.processing_thread.start()
+            Thread(target=self.show_finishing_options, daemon=True).start()
+        else:
+            showerror('خطأ', 'يجب تحديد جميع الإعدادات')
+        
+    def show_finishing_options(self):
+        self.processing_thread.join()
+        self.progress_bar.forget()
+        self.label_packing['pady'] = (50, 50)
+        self.update_guiding_label('..انتهت المعالجة بنجاح')
+
+        Button(self, text='فتح المقطع', bg=BTN_BG, fg=FG, command=self.open_video).pack(BTN_PACKING)
+        Button(self, text='فتح موقع المقطع', bg=BTN_BG, fg=FG,
+            command=self.open_video_folder).pack(BTN_PACKING, pady=10)
+        
+        self.video_name = self.rename_video_to('original')
 
     def gui_preparation(self, step_name: str = '', clips: list = [], current_clip_index: int = 0):
         '''
         It prepares the GUI according to the current step.
 
         step_name should be one of the following:
+            - 'select clip options'
             - 'slice video into clips'
             - 'extract audio'
             - 'separate music'
             - 'merge media'
         '''
-        appropriate_step_names = ('slice video into clips', 'extract audio', 'separate music', 'merge media')
+        appropriate_step_names = (
+            'select clip options',
+            'slice video into clips',
+            'extract audio',
+            'separate music',
+            'merge media'
+        )
         error_text = f'step_name is not an appropriate name.\nIt should be either:\n\t{'\nor\n\t'.join(appropriate_step_names)}'
         assert step_name in appropriate_step_names, error_text
 
-        if step_name == 'slice video into clips':
+        if step_name == 'select clip options':
+            self.dimensions_combobox.forget()
+            self.duration_combobox.forget()
+            self.save_options_btn.forget()
+
+        elif step_name == 'slice video into clips':
             self.update_guiding_label(f'..تقسيم المقطع')
 
         elif step_name == 'extract audio':
@@ -342,21 +434,6 @@ class App(Tk):
         
         elif step_name == 'merge media' and not clips:
             self.update_guiding_label('..دمج الصوت مع المقطع')
-
-
-
-    def show_finishing_options(self):
-        self.processing_thread.join()
-
-        self.progress_bar.forget()
-        self.label_packing['pady'] = (50, 50)
-        self.update_guiding_label('..انتهت المعالجة بنجاح')
-
-        Button(self, text='فتح المقطع', bg=BTN_BG, fg=FG, command=self.open_video).pack(BTN_PACKING)
-        Button(self, text='فتح موقع المقطع', bg=BTN_BG, fg=FG,
-            command=self.open_video_folder).pack(BTN_PACKING, pady=10)
-        
-        self.video_name = self.rename_video_to('original')
 
     def open_video(self):
         os.startfile(self.name_cases['music removed'])
