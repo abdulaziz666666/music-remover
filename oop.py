@@ -66,6 +66,12 @@ class ClipsMusicRemover:
         
         self.watch_thread.join()
         self.save_whole_video()
+        self.app.delete_temporary_files(
+            audio_name=self.audio_name,
+            clips=self.clips,
+            listed_processed_clips=self.listed_processed_clips,
+            there_is_clips=True
+        )
 
     def slice_video_into_clips(self):
         self.app.gui_preparation('slice video into clips')
@@ -200,7 +206,8 @@ class VideoMusicRemover:
         self.extract_audio()
         self.separate_music()
         self.merge_media()
-        
+        self.app.delete_temporary_files(audio_name=self.audio_name)
+
     def extract_audio(self):       
         self.app.gui_preparation('extract audio')
         process = subprocess.Popen([
@@ -251,7 +258,7 @@ class App(Tk):
         super().__init__()
 
         self.name_cases = {'music removed': '', 'underscored': '', 'original': ''}
-        self.label_packing = {'fill': 'x', 'pady': (50, 50)}
+        self.label_packing = {'fill': 'x', 'pady': (80, 40)}
 
         self.title('مزيل الموسيقا')
         self.config(bg=WINDOW_BG)
@@ -399,7 +406,7 @@ class App(Tk):
         duration = self.clip_duration.get()
 
         # if all settings have been set
-        if dimensions != 'اختر أبعاد اللقطات' and duration != 'اختر مدة اللقطات':
+        if dimensions != 'اختر أبعاد اللقطات' and duration != 'اختر مدة كل اللقطات':
             self.gui_preparation('select clip options')
             self.processing_thread = Thread(
                 target=lambda: self.cmr.start_processing(self.video_name, self.name_cases, dimensions, duration),
@@ -425,6 +432,8 @@ class App(Tk):
             command=self.open_video_folder).pack(BTN_PACKING, pady=10)
         
         self.video_name = self.rename_video_to('original')
+
+        
 
     def gui_preparation(self, step_name: str = '', clips: list = [], current_clip_index: int = 0):
         '''
@@ -453,6 +462,7 @@ class App(Tk):
             self.save_options_btn.forget()
 
         elif step_name == 'slice video into clips':
+            self.label_packing['pady'] = (50, 0)
             self.update_guiding_label(f'..تقسيم المقطع')
 
         elif step_name == 'extract audio':
@@ -460,14 +470,14 @@ class App(Tk):
                 self.select_btn.forget()
 
             if not self.progress_bar.winfo_ismapped():
-                self.progress_bar.pack(padx=20, pady=(100, 0))
+                self.progress_bar.pack(padx=20, pady=(110, 0))
 
             self.label_packing['pady'] = (10, 0)
             self.update_progress_bar(0)
 
             if clips:
                 self.update_progress_bar((current_clip_index+1)/len(clips)*100)
-                self.update_guiding_label(f'{current_clip_index+1}/{len(clips)}')
+                self.update_guiding_label(f'({current_clip_index+1}/{len(clips)}) معالجة اللقطة')
             else:
                 self.update_guiding_label('..استخراج الصوت')
         
@@ -505,29 +515,29 @@ class App(Tk):
         
         return self.name_cases[case]
 
-    # def delete_temporary_files(self, there_is_clips=False):
-    #     '''
-    #     It removes any temporary files that used through any process.  
-    #     '''
-    #     os.system('cls')
-    #     os.remove('vocals.wav')
-    #     os.remove(self.audio_name)
+    def delete_temporary_files(self, audio_name, clips=[], listed_processed_clips=[], there_is_clips=False):
+        '''
+        It removes any temporary files that used through any process.  
+        '''
+        os.system('cls')
+        os.remove('vocals.wav')
+        os.remove(audio_name)
 
-    #     if os.path.exists('separated'):
-    #         os.rmdir('separated')
+        if os.path.exists('separated'):
+            os.rmdir('separated')
 
-    #     if there_is_clips:
-    #         os.remove('processed clips.txt')
-    #         for clip, p_clip in zip(self.clips, self.listed_processed_clips):
-    #             temp_files = [clip, p_clip, clip.replace('.mp4', '.wav')]
+        if there_is_clips:
+            os.remove('processed clips.txt')
+            for clip, p_clip in zip(clips, listed_processed_clips):
+                temp_files = [clip, p_clip, clip.replace('.mp4', '.wav')]
 
-    #             for f in temp_files:
-    #                 if os.path.exists(f):
-    #                     os.remove(f)
+                for f in temp_files:
+                    if os.path.exists(f):
+                        os.remove(f)
                     
-    #             file_number = clip.split('/')[-1][:clip.rfind('.')]
-    #             file_number = int(file_number) + 1
-    #             print(f'{file_number}/{len(self.clips)} deleted successfully')
+                file_number = clip.split('/')[-1][:clip.rfind('.')]
+                file_number = int(file_number) + 1
+                print(f'{file_number}/{len(clips)} deleted successfully')
 
         
     def update_progress_bar(self, percentage: float):
