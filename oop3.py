@@ -27,6 +27,7 @@ BTN_STYLE = {'bg': BTN_BG, 'fg': FG}
 BTN_PACKING = {'ipadx': 20, 'ipady': 5}
 SUPPORTED_VIDEO_FORMATS = '*.MP4 *.MKV *.MOV *.WEBM *.AVI *.FLV'
 
+# Initialize the audio separation AI model
 MODEL = get_model('htdemucs')
 MODEL.eval()
 
@@ -53,11 +54,11 @@ def get_existing_clips_only(clips):
     
     return existing_clips
 
-def get_video_length(video_file_path):
+def get_video_length(video_path):
     '''
     It returns the given video's length.
     '''
-    video = cv2.VideoCapture(video_file_path)
+    video = cv2.VideoCapture(video_path)
     fps = video.get(cv2.CAP_PROP_FPS)
     frame_count = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
     video.release()
@@ -102,8 +103,6 @@ def save_vocals(path, wav, sr):
         sr 
     )
 
-
-
 class ProgressRecorder():
     '''
     If you want to customize redirect_stderr/redirect_stdout,\n
@@ -141,11 +140,11 @@ class ClipsMusicRemover:
         self.app = app
         self.progress_recorder = progress_recorder
     
-    def start_processing(self, video_name: str, name_cases: dict[str, str], dimensions: str, duration):
+    def start_processing(self, video_path: str, name_cases: dict[str, str], dimensions: str, duration):
         '''
         From here the game starts!
         '''
-        self.video_name = video_name
+        self.video_path = video_path
         self.name_cases = name_cases
         self.clip_dimensions = dimensions 
         self.clip_duration = duration # it comes as string
@@ -180,7 +179,7 @@ class ClipsMusicRemover:
         with self.processing_tempdir:
             slicing_process = subprocess.Popen([
                 get_program_path('ffmpeg.exe'),
-                '-i', self.video_name,
+                '-i', self.video_path,
                 '-c', 'copy',
                 '-f', 'segment',
                 '-segment_time', str(self.clip_duration),
@@ -194,7 +193,7 @@ class ClipsMusicRemover:
         self.processed_clips = queue.Queue(maxsize=1000)
         self.listed_processed_clips = []
 
-        length = get_video_length(self.video_name)
+        length = get_video_length(self.video_path)
         clips_range = list(range(0, length, self.clip_duration))
 
         for i in range(len(clips_range)):
@@ -329,13 +328,13 @@ class VideoMusicRemover:
         self.app = app
         self.progress_recorder = progress_recorder
 
-    def start_processing(self, video_name, name_cases):
+    def start_processing(self, video_path, name_cases):
         '''
         From here the game starts!
         '''
-        self.video_name = video_name
+        self.video_path = video_path
         self.name_cases = name_cases
-        self.name_without_format = self.video_name[:self.video_name.rfind('.')] 
+        self.name_without_format = self.video_path[:self.video_path.rfind('.')] 
         self.audio_name = self.name_without_format + '.wav'
         self.audio_name = self.audio_name[self.audio_name.rfind('/')+1:]
         
@@ -347,10 +346,11 @@ class VideoMusicRemover:
 
     def extract_audio(self):
         '''
-        It 
+        It extracts the audio from `self.video_path`
         '''
         self.app.gui_preparation('extract audio')
-
+        # a temporary folder that holds all the files produced by the program.
+        # deleted after finishing.
         self.processing_tempdir = TemporaryDirectory(
             dir=Path(__file__).parent.absolute(),
             prefix='video_remover_',
@@ -358,20 +358,25 @@ class VideoMusicRemover:
         )
         self.tempdir_path = Path(self.processing_tempdir.name).absolute()
 
+        # saving the extracted audio at the program's temporary folder.
         with self.processing_tempdir:
             extraction_process = subprocess.Popen([
                 get_program_path('ffmpeg.exe'),
-                '-i', self.video_name,
+                '-i', self.video_path,
                 self.tempdir_path / self.audio_name,
                 '-y'
             ])
             extraction_process.wait()
     
     def separate_music(self):
+        '''
+        It separates the extracted audio into stems to keep on the vocals only.
+        '''
         self.app.gui_preparation('separate music')
 
         wav, sr = load_audio(self.tempdir_path / self.audio_name)
 
+        # so we get know about the progress.
         with redirect_stderr(self.progress_recorder):
             with torch.no_grad():
                 stems = apply_model(
@@ -385,12 +390,15 @@ class VideoMusicRemover:
         save_vocals(self.tempdir_path, stems[3], sr)
 
     def merge_media(self):
+        '''
+        It merges the vocals (no-music) audio file with the video file; Producing a clean video.
+        '''
         self.app.gui_preparation('merge media')
 
         # that prompt will replace the old polluted audio from the video with the pure one.
         merging_process = subprocess.Popen([
             get_program_path('ffmpeg.exe'),
-            '-i', self.video_name,
+            '-i', self.video_path,
             '-i', self.tempdir_path / 'vocals.wav',
             '-map', '0:v:0',
             '-map', '1:a:0',
@@ -402,6 +410,12 @@ class VideoMusicRemover:
         merging_process.wait()
 
 class App(Tk):
+    '''
+    The main class that administrate the GUI section of the program.\n
+    It is responible of connecting the GUI with the two classes of\n
+    VMC (Video Music Remover), and CMC (Clips Music Remover)\n
+    depending on user selection.
+    '''
     def __init__(self):
         super().__init__()
 
@@ -423,8 +437,7 @@ class App(Tk):
     
     def setup(self, progress_recorder: ProgressRecorder, vmr: VideoMusicRemover, cmr: ClipsMusicRemover):
         '''
-        It connects every related class with the `App` class.\n
-        Basically, it makes a setup.
+        It connects every related class with the `App` class.
         '''
         self.progress_recorder = progress_recorder
         self.vmr = vmr
@@ -436,18 +449,18 @@ class App(Tk):
         hasn't been selected.
         '''
         try:
-            self.video_name = askopenfile(filetypes=[('مقاطع الفيديو', SUPPORTED_VIDEO_FORMATS)]).name
+            self.video_path = askopenfile(filetypes=[('مقاطع الفيديو', SUPPORTED_VIDEO_FORMATS)]).name
         except AttributeError:
             showinfo('ملاحظة', 'لم يتم اختيار المقطع')
         else:
             # underscored_name 'underscores' the file name only.
-            self.underscored_name = self.video_name[:self.video_name.rfind('/')] + '_'.join(self.video_name[self.video_name.rfind('/'):].split())
-            self.name_cases['original'] = self.video_name
+            self.underscored_name = self.video_path[:self.video_path.rfind('/')] + '_'.join(self.video_path[self.video_path.rfind('/'):].split())
+            self.name_cases['original'] = self.video_path
             self.name_cases['underscored'] = self.underscored_name
-            self.name_cases['music removed'] = self.video_name[:self.video_name.rfind('.')] + ' (بلا موسيقا).mp4'
+            self.name_cases['music removed'] = self.video_path[:self.video_path.rfind('.')] + ' (بلا موسيقا).mp4'
 
             # so it doesn't show FileNotFoundError when the filename has spaces
-            self.video_name = self.rename_video_to('underscored')
+            self.video_path = self.rename_video_to('underscored')
 
             self.show_processing_options()
 
@@ -490,7 +503,7 @@ class App(Tk):
             self.show_watching_options()
 
         elif option == 'save':
-            self.processing_thread = Thread(target=lambda: self.vmr.start_processing(self.video_name, self.name_cases), daemon=True)
+            self.processing_thread = Thread(target=lambda: self.vmr.start_processing(self.video_path, self.name_cases), daemon=True)
             self.processing_thread.start()
             Thread(target=self.show_finishing_options, daemon=True).start()
 
@@ -556,7 +569,7 @@ class App(Tk):
         if dimensions != 'اختر أبعاد اللقطات' and duration != 'اختر مدة كل اللقطات':
             self.gui_preparation('select clip options')
             self.processing_thread = Thread(
-                target=lambda: self.cmr.start_processing(self.video_name, self.name_cases, dimensions, duration),
+                target=lambda: self.cmr.start_processing(self.video_path, self.name_cases, dimensions, duration),
                 daemon=True
             )
             self.processing_thread.start()
@@ -578,7 +591,7 @@ class App(Tk):
         Button(self, BTN_STYLE, text='فتح موقع المقطع',
             command=self.open_video_folder).pack(BTN_PACKING, pady=10)
         
-        self.video_name = self.rename_video_to('original')
+        self.video_path = self.rename_video_to('original')
 
     def gui_preparation(self, step_name: str = '', clips: list[str] = [], current_clip_index: int = 0):
         '''
