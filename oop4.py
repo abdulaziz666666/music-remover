@@ -1,6 +1,6 @@
 from tkinter import Tk, Label, Button, Entry, StringVar
 from tkinter.ttk import Progressbar, Combobox
-from tkinter.filedialog import askopenfile
+from tkinter.filedialog import askopenfile, askdirectory
 from tkinter.messagebox import showinfo, showerror
 from threading import Thread
 from time import sleep 
@@ -105,78 +105,6 @@ def save_vocals(path, wav, sr):
         sr 
     )
 
-class VideoDownloader:
-    def setup(self, app):
-        self.app = app
-
-    def is_valid_url(self, url):
-        options = {
-            'skip_download': True,
-            'extract_flat': True
-        }
-        with yt_dlp.YoutubeDL(options) as ydl:
-            try:
-                ydl.extract_info(url)
-                return True
-            except yt_dlp.utils.DownloadError:
-                return False
-
-    def check_available_formats(self, url: str):
-        options = {
-            'skip_download': True,
-            'quiet': True # to not print any messages to std.
-        }
-        self.ways_to_download = []
-
-        # First: presenting the available video formats to download.
-        with yt_dlp.YoutubeDL(options) as youtube_downloader:
-            try:
-                # json data (i think).
-                metadata = youtube_downloader.extract_info(url)
-                # formated data about the video formats.
-                available_downloads = metadata.get('formats', [metadata])
-
-                i = 0
-                for way in available_downloads:
-                    # excluding non-video formats.
-                    # i noticed that formats without filesizes mentioned are not videos anyway.
-                    # they are story-board formats.
-                    if not 'filesize' in way.keys(): 
-                        continue
-                    if any(('audio only' in str(value) for value in way.values())):
-                        continue
-                    
-                    # for every download format (way).
-                    current_way = []
-                    for name in way:
-                        # only necessary information.
-                        if name not in ['filesize', 'format']:
-                            continue
-                        current_way.append([name, way[name]])
-
-                    i += 1
-                    self.ways_to_download.append(current_way)
-
-            except yt_dlp.utils.DownloadError:
-                print('please check your internet connection and try again')
-
-    def get_ways_to_download(self):
-        return self.ways_to_download
-
-    def download(self, format_id: str, url: str):
-        # download the video after selecting the format.
-        options = {
-            'format': format_id,
-            'overwrites': True,
-            'outtmpl': '%(title)s.%(ext)s',
-            'merge_output_format': 'mp4'
-        }
-        with yt_dlp.YoutubeDL(options) as youtube_downloader:
-            try:
-                youtube_downloader.download(url)
-            except yt_dlp.utils.DownloadError:
-                print('please check your internet connection and try again')
-
 
 class ProgressRecorder:
     '''
@@ -188,7 +116,7 @@ class ProgressRecorder:
         self.app = app
 
     def write(self, text):
-        match = re.search(r'(\d+)%', text) # search for a number followed by %.
+        match = re.search(r'(\d+(?:\.\d+)?)%', text) # search for a number followed by %.
 
         if match: 
             percentage = int(match.group(1))
@@ -198,6 +126,81 @@ class ProgressRecorder:
 
     def flush(self):
         pass
+
+class VideoDownloader:
+    def setup(self, app):
+        self.app = app
+
+    def is_valid_url(self, url):
+        options = {
+            'skip_download': True,
+        }
+        with yt_dlp.YoutubeDL(options) as ydl:
+            try:
+                self.video_title = ydl.extract_info(url).get('title')
+                self.downloaded = False
+                return True
+            except yt_dlp.utils.DownloadError:
+                return False
+
+    
+    # def check_available_formats(self, url: str):
+    #     options = {
+    #         'skip_download': True,
+    #         'quiet': True # to not print any messages to std.
+    #     }
+
+    #     # First: presenting the available video formats to download.
+    #     with yt_dlp.YoutubeDL(options) as youtube_downloader:
+    #         try:
+    #             # json data (i think).
+    #             metadata = youtube_downloader.extract_info(url)
+    #             # formated data about the video formats.
+    #             formats = metadata.get('formats', [metadata])
+    #             self.available_formats = {}
+    #             self.video_title = metadata.get('title', None)
+
+    #             for download_format in formats:
+    #                 filesize = download_format.get('filesize')
+    #                 format_type = download_format.get('format').split(' - ')[1]
+    #                 format_id = download_format.get('id')
+
+    #                 if 'storyboard' in format_type or 'audio only' in format_type:
+    #                     continue
+                        
+    #                 if filesize:
+    #                     filesize = str(round(filesize/1024/1024)) + ' MB'
+    #                 else:
+    #                     filesize = '? MB'
+
+    #                 format_name = f'{format_type} {filesize}'
+    #                 self.available_formats[format_name] = format_id
+
+    #         except yt_dlp.utils.DownloadError:
+    #             print('please check your internet connection and try again')
+
+    # def get_available_formats(self):
+    #     return self.available_formats
+
+    def get_video_title(self):
+        return self.video_title
+
+    def download(self, url: str, save_path: str):
+        # download the video after selecting the format.
+        options = {
+            'overwrites': True,
+            'outtmpl': f'{save_path}/%(title)s.%(ext)s',
+            'merge_output_format': 'mp4',
+            'quiet': True
+        }
+        with yt_dlp.YoutubeDL(options) as youtube_downloader:
+            try:
+                youtube_downloader.download(url)
+            except yt_dlp.utils.DownloadError:
+                print('please check your internet connection and try again')
+            else: 
+                self.downloaded = True
+
 
 class ClipsMusicRemover:
     '''
@@ -505,14 +508,14 @@ class App(Tk):
         self.guiding_label = Label(self, text='الرجاء إدخال رابط المقطع من يوتيوب\nأو تحديد موقعه إذا كان محفوظا\n.في الجهاز', bg=WINDOW_BG, fg=FG)
         self.guiding_label.pack(self.label_packing)
 
-        self.url_entry = Entry(self, width=30)
-        self.url_entry.pack(pady=10)
+        self.url_entry = Entry(self, width=29)
+        self.url_entry.pack(pady=20)
 
-        self.download_btn = Button(self, BTN_STYLE, text='تحميل', command=self.download_video)
-        self.download_btn.pack(BTN_PACKING, pady=(0, 10))
+        self.download_btn = Button(self, BTN_STYLE, text='تحميل', command=self.check_link_validaty)
+        self.download_btn.pack(BTN_PACKING, ipadx=69, pady=(0, 10))
 
         self.select_btn = Button(self, BTN_STYLE, text='اختر المقطع من الجهاز', command=self.select_video)
-        self.select_btn.pack(BTN_PACKING)
+        self.select_btn.pack(BTN_PACKING, ipadx=30)
 
         self.progress_bar = Progressbar(self, length=200, orient='horizontal')
     
@@ -525,87 +528,110 @@ class App(Tk):
         self.vmr = vmr
         self.cmr = cmr
 
-    def download_video(self):
+    def check_link_validaty(self):
         url = self.url_entry.get()
+
         if url and self.video_downloader.is_valid_url(url):
-            self.video_downloader.check_available_formats(url)
-            self.show_downloading_options()
-            print('\n\nok!')
+            
+            self.video_path = askdirectory()
+            if not self.video_path:
+                showinfo('ملاحظة', 'يجب اختيار مجلد لتحميل المقطع')
+                return
+
+            self.download_btn.forget()
+            self.select_btn.forget()
+            self.url_entry.forget()
+
+            self.update_guiding_label('..جاري تحميل المقطع')
+
+            thread = Thread(target=lambda: self.video_downloader.download(url, self.video_path), daemon=True)
+            thread.start()
+
+            self.video_path = self.video_path.replace('\\', '/')
+            self.video_path += '/' + self.video_downloader.get_video_title() + '.mp4'
+            
+            thread.join()
+            self.update_guiding_label('تم تحميل المقطع بنجاح')
+            self.start_without_selecting() # As the video is already selected.
+
         else:
-            print('not ok')
+            showerror('خطأ', 'ربما يكون الرابط غير صحيح أو أنك فاقد للاتصال بالإنترنت')
 
-    def show_downloading_options(self):
-        self.download_btn.forget()
-        self.select_btn.forget()
-        self.url_entry.forget()
-        self.update_guiding_label('عليك اختيار جودة المقطع لتحميله')
+    def start_without_selecting(self):
+        self.setup_names()
+        self.show_processing_options()
 
-        self.available_formats = self.video_downloader.get_ways_to_download()
-        self.formats_with_ids = {}
+    # def show_downloading_options(self):
+    #     self.download_btn.forget()
+    #     self.select_btn.forget()
+    #     self.url_entry.forget()
+    #     self.update_guiding_label('عليك اختيار جودة المقطع لتحميله')
 
-        for way in self.available_formats:
-            filesize = ''
-            format_name = ''
-            for value_data in way:
+    #     self.available_formats = self.video_downloader.get_available_formats()
 
-                if value_data[0] == 'filesize':
-                    if value_data[1]:
-                        filesize = str(round(value_data[1]/1024/1024)) + ' MB'
-                    else:
-                        filesize = '? MB'
-                    
-                elif value_data[0] == 'format':
-                    format_id = value_data[1].split(' - ')[0]
-                    format_name = value_data[1].split(' - ')[1]
-                    self.formats_with_ids[format_name + ' ' + filesize] = format_id
+    #     self.selected_format = StringVar()
+    #     self.available_formats_cb = Combobox(
+    #         self,
+    #         state='readonly',
+    #         justify='center',
+    #         width=25, 
+    #         textvariable=self.selected_format
+    #     )
+    #     self.available_formats_cb.config(
+    #         values=(
+    #             'اختر جودة المقطع',
+    #             *self.available_formats.keys()
+    #         )
+    #     )
+    #     self.available_formats_cb.current(0)
+    #     self.available_formats_cb.pack(pady=10)
 
-        print(self.formats_with_ids)
-        self.download_format = StringVar()
-        self.available_formats_cb = Combobox(
-            self,
-            state='readonly',
-            justify='center',
-            width=25, 
-            textvariable=self.download_format
-        )
-        self.available_formats_cb.config(
-            values=(
-                'اختر جودة المقطع',
-                *self.formats_with_ids.keys()
-            )
-        )
-        self.available_formats_cb.current(0)
-        self.available_formats_cb.pack(pady=10)
+    #     self.download_btn.pack(BTN_PACKING, pady=10)
+    #     self.download_btn.config(command=self.request_download)
 
-        '''
-        مهمات بكرة:
-        أعيد إظهار زر التحميل بنص بدء التحميل
-        +
-        إذا نسقت التنزيل من اليوتيوب مباشرة مع الاختيار صيغة المعالجة
-        أبدأ أنظم البرنامج وخاصة تهيئة الواجهة لأن نص الدوال الموجودة
-        ..في ذا الكائن هي تهيئة واجهة فمالها داعي تسوي زحمة بس
-        '''
+    #     '''
+    #     مهمات بكرة:
+    #     أعيد إظهار زر التحميل بنص بدء التحميل
+    #     +
+    #     إذا نسقت التنزيل من اليوتيوب مباشرة مع الاختيار صيغة المعالجة
+    #     أبدأ أنظم البرنامج وخاصة تهيئة الواجهة لأن نص الدوال الموجودة
+    #     ..في ذا الكائن هي تهيئة واجهة فمالها داعي تسوي زحمة بس
+    #     '''
+
+    # def request_download(self):
+    #     self.video_downloader.download(
+    #         self.available_formats[self.selected_format.get()],
+    #         self.url_entry.get(),
+    #         self.video_path
+    #     )
 
     def select_video(self):
         '''
-        It manages video selection, handles the `AttributeError` if the video\n
+        It manages video selection. Handles the `AttributeError` if the video
         hasn't been selected.
         '''
         try:
             self.video_path = askopenfile(filetypes=[('مقاطع الفيديو', SUPPORTED_VIDEO_FORMATS)]).name
+
         except AttributeError:
             showinfo('ملاحظة', 'لم يتم اختيار المقطع')
         else:
-            # underscored_name 'underscores' the file name only.
-            self.underscored_name = self.video_path[:self.video_path.rfind('/')] + '_'.join(self.video_path[self.video_path.rfind('/'):].split())
-            self.name_cases['original'] = self.video_path
-            self.name_cases['underscored'] = self.underscored_name
-            self.name_cases['music removed'] = self.video_path[:self.video_path.rfind('.')] + ' (بلا موسيقا).mp4'
+            self.download_btn.forget()
+            self.select_btn.forget()
+            self.url_entry.forget()
 
-            # so it doesn't show FileNotFoundError when the filename has spaces
-            self.video_path = self.rename_video_to('underscored')
-
+            self.setup_names()
             self.show_processing_options()
+
+    def setup_names(self):
+        # underscored_name 'underscores' the file name only.
+        self.underscored_name = self.video_path[:self.video_path.rfind('/')] + '_'.join(self.video_path[self.video_path.rfind('/'):].split())
+        self.name_cases['original'] = self.video_path
+        self.name_cases['underscored'] = self.underscored_name
+        self.name_cases['music removed'] = self.video_path[:self.video_path.rfind('.')] + ' (بلا موسيقا).mp4'
+
+        # so it doesn't show FileNotFoundError when the filename has spaces
+        self.video_path = self.rename_video_to('underscored')
 
     def show_processing_options(self):
         '''
