@@ -1,3 +1,6 @@
+# I'm not sure where this version differs from the old ones, so i will call it "1.2.1".
+# Maybe it is even more organized.
+
 from tkinter import Tk, Label, Button, StringVar
 from tkinter.ttk import Progressbar, Combobox
 from tkinter.filedialog import askopenfile
