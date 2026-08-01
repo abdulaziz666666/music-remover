@@ -1,3 +1,7 @@
+# The first version of the program.
+# It only provides the ability of purifying the whole video at once.
+# The program is noticeably not ordered.
+
 from tkinter import Tk, Label, Button, IntVar
 from tkinter.ttk import Progressbar
 from tkinter.filedialog import askopenfile
