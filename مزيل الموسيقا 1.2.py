@@ -1,3 +1,6 @@
+# The first reliable version of the program.
+# Here you can see the code is more appropriate.
+
 from tkinter import Tk, Label, Button, StringVar
 from tkinter.ttk import Progressbar, Combobox
 from tkinter.filedialog import askopenfile
