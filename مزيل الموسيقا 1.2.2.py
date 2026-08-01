@@ -1,3 +1,6 @@
+# This version provides a better way of temporary files (original extracted audio, vocals, and clips -if clips mode selected-)
+# as it delete them safely after the program ends, preventing any permission errors.
+
 from tkinter import Tk, Label, Button, StringVar
 from tkinter.ttk import Progressbar, Combobox
 from tkinter.filedialog import askopenfile
