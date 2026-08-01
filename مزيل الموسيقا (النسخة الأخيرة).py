@@ -1,3 +1,7 @@
+# The last complete 1.3 version. It is speciallized with the abilty of downloading
+# YouTube videos directly from the program; So you can have fun easily in a حلال way -إن شاء الله-.
+# تم بحمد الله
+
 # A great way to deal with GUIs:
 #   for thread-dependant process: use Thread() object.
 #   for a thread-safe GUI update: use after() method.
