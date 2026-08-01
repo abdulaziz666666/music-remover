@@ -1,3 +1,5 @@
+# the update here is the class App, where it comes more ordered but still not as needed
+
 from tkinter import Tk, Label, Button
 from tkinter.ttk import Progressbar
 from tkinter.filedialog import askopenfile
