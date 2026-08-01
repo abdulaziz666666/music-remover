@@ -1,5 +1,6 @@
-# I'm not sure where this version differs from the old ones, so i will call it "1.2.1".
-# Maybe it is even more organized.
+# As the program can't be built using Nuitka because of compatibilty problem with torchaudio,
+# i used soundfile instead. Using ChatGPT, i changed the code a little bit so it also work
+# with torch -as the program rely on demucs- by converting the sound into Tensor type -etc.
 
 from tkinter import Tk, Label, Button, StringVar
 from tkinter.ttk import Progressbar, Combobox
