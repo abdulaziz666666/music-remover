@@ -3,13 +3,13 @@
 <br><br>
 
 <h2>قائمة المحتويات</h2>
-<ul align="right" style="text-decoration: none;">
-  <li><a href="#install">تثبيت البرنامج</a></li> <br>
+<ul align="right">
+  <li><a href="#install" style="text-decoration: none;">تثبيت البرنامج</a></li> <br>
   <li>
-    <a href="#HowItWorks">كيف يعمل البرنامج</a> <br>
+    <a href="#HowItWorks" style="text-decoration: none;">كيف يعمل البرنامج</a> <br>
     <ul>
       <li>
-        <a href="FromDevice">اختيار مقطع من الجهاز</a> <br>
+        <a href="FromDevice" style="text-decoration: none;">اختيار مقطع من الجهاز</a> <br>
         <ul>
           <li><a href="SaveVideo">خيار "حفظ المقطع"</a></li> <br>
           <li>
@@ -31,9 +31,11 @@
 <p style="text-align: right;">
 يمكنك تثبيت البرنامج عن طريق تحميل المثبت من الرابط التالي:
 </p>
-<a href="https://drive.google.com/file/d/1Y6HItaUeQjN-YkB13YTTq1IYmRFwuMO7/view?usp=sharing" align="center">
+<p align="center">  
+<a href="https://drive.google.com/file/d/1Y6HItaUeQjN-YkB13YTTq1IYmRFwuMO7/view?usp=sharing">
   اضغط هنا
 </a>
+</p>
 <br><br>
 
 <h2 id="HowItWorks">كيف يعمل البرنامج؟</h2>
