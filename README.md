@@ -4,22 +4,22 @@
 
 <h2>قائمة المحتويات</h2>
 <ul align="right">
-  <li><a href="#install">تثبيت البرنامج</a></li> <br>
+  <li>تثبيت البرنامج<a href="#install">*</a></li> <br>
   <li>
-    <a href="#HowItWorks">كيف يعمل البرنامج</a> <br>
+                                                                            كيف يعمل البرنامج<a href="#HowItWorks">*</a> <br>
     <ul>
       <li>
-        <a href="#FromDevice">اختيار مقطع من الجهاز</a> <br>
+                                                                      اختيار مقطع من الجهاز<a href="#FromDevice">*</a> <br>
         <ul>
-          <li><a href="#SaveVideo">خيار "حفظ المقطع"</a></li> <br>
+          <li>خيار "حفظ المقطع"<a href="#SaveVideo">*</a></li> <br>
           <li>
-            <a href="#WatchDirectly">خيار "مشاهدة فورية"</a> <br>
+                                                              خيار "مشاهدة فورية"<a href="#WatchDirectly">*</a> <br>
             <ul>
-              <li><a href="#ClipsControll">التحكم في اللقطات</a></li> <br>
+              <li>التحكم في اللقطات<a href="#ClipsControll">*</a></li> <br>
             </ul>
           </li>
         </ul>
-        <li><a href="#FromYouTube">تحميل مقطع من يوتيوب</a></li> <br>
+        <li>تحميل مقطع من يوتيوب<a href="#FromYouTube">*</a></li> <br>
       </li>
     </ul>
   </li>
