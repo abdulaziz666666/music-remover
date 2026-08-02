@@ -9,17 +9,17 @@
     <a href="#HowItWorks">كيف يعمل البرنامج</a> <br>
     <ul>
       <li>
-        <a>اختيار مقطع من الجهاز</a> <br>
+        <a href="FromDevice">اختيار مقطع من الجهاز</a> <br>
         <ul>
-          <li><a>خيار "حفظ المقطع"</a></li> <br>
+          <li><a href="SaveVideo">خيار "حفظ المقطع"</a></li> <br>
           <li>
-            <a>خيار "مشاهدة فورية"</a> <br>
+            <a href="WatchDirectly">خيار "مشاهدة فورية"</a> <br>
             <ul>
-              <li><a>التحكم في اللقطات</a></li> <br>
+              <li><a href="ClipsControll">التحكم في اللقطات</a></li> <br>
             </ul>
           </li>
         </ul>
-        <li><a>تحميل مقطع من يوتيوب</a></li> <br>
+        <li><a href="FromYouTube">تحميل مقطع من يوتيوب</a></li> <br>
       </li>
     </ul>
   </li>
@@ -31,8 +31,8 @@
 <p style="text-align: right;">
 يمكنك تثبيت البرنامج عن طريق تحميل المثبت من الرابط التالي:
 </p>
-<a>
-  https://drive.google.com/file/d/1Y6HItaUeQjN-YkB13YTTq1IYmRFwuMO7/view?usp=sharing
+<a href="https://drive.google.com/file/d/1Y6HItaUeQjN-YkB13YTTq1IYmRFwuMO7/view?usp=sharing" align="center">
+  اضغط هنا
 </a>
 <br><br>
 
@@ -118,7 +118,7 @@
   </p>
   
   <br>
-  <h5 align="right" tag="ClipsControll">التحكم في اللقطات</h5>
+  <h5 align="right" id="ClipsControll">التحكم في اللقطات</h5>
   
   <p align="right">
   يمكن إيقاف اللقطة بكل بساطة بالضغط على زر المسافة (space)، وتقديم 10 ثوانٍ بالضغط على زر السهم الأيمن، أو الرجوع إلى الوراء بمقدار 10 ثوانٍ بالضغط على  زر السهم الأيسر، هذا بالنسبة للقطة التي تشاهدها حاليًّا، أما عن الرجوع إلى اللقطات الماضية فهو غير ممكن في الإصدار الحالي، ربما تتوفر الميزة في الإصدارات القادمة إن شاء الله.
