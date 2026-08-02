@@ -3,7 +3,7 @@
 <br><br>
 
 <h2>قائمة المحتويات</h2>
-<ul align="right">
+<ul align="right" style="text-decoration: none;">
   <li><a href="#install">تثبيت البرنامج</a></li> <br>
   <li>
     <a href="#HowItWorks">كيف يعمل البرنامج</a> <br>
